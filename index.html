@@ -148,10 +148,13 @@ body.cinema #lbox::before,body.cinema #lbox::after{height:11vh}
 .tb-t.on{color:#e8ffe8;border-bottom-color:var(--or)}
 .tb-t i{font-style:normal;position:absolute;top:2px;right:0;min-width:16px;height:16px;border-radius:8px;background:var(--red);color:#fff;font-size:11px;line-height:16px;text-align:center;display:none}
 .tb-t i:not(:empty){display:block}
-.tb-x{margin-left:auto;font-size:20px}
+.tb-x{margin-left:auto;font-size:17px;color:#fff;background:rgba(255,106,19,.22);border:1px solid rgba(255,106,19,.6);border-radius:6px;margin-bottom:4px;padding:6px 14px}
+.tb-x:hover{background:rgba(255,106,19,.4)}
+.tb-back{display:none;margin-bottom:8px}
 .tb-body{flex:1;min-height:0;overflow:auto;padding:12px 14px;touch-action:pan-y;overscroll-behavior:contain}
 .tb-body section[hidden]{display:none}
 #shop h3{font:700 15px 'Barlow Condensed',sans-serif;color:var(--or);margin:4px 2px 8px;letter-spacing:.05em;text-transform:uppercase}
+#shop canvas{position:static;inset:auto}
 #sonar,#camv{display:block;width:100%;height:auto;border:1px solid #1e3a28;border-radius:4px;background:#020b06}
 #camv{image-rendering:pixelated;aspect-ratio:16/9}
 .tb-note{font:14px 'Special Elite',monospace;color:#8fbf9c;margin:8px 2px 0}
@@ -164,7 +167,7 @@ body.cinema #lbox::before,body.cinema #lbox::after{height:11vh}
 #docView{background:#e6e0cf;color:#1e1b16;border-radius:2px;padding:16px 18px;font:15px/1.5 'Special Elite',monospace;box-shadow:inset 0 0 30px rgba(120,90,40,.25);min-height:200px}
 #docView h4{font:20px 'Special Elite',monospace;margin:0 0 10px;color:#7a0e08;text-transform:uppercase}
 #docView p{margin:0 0 10px}.rd{background:#111;color:#111;letter-spacing:-.1em}
-@media(max-width:640px){.tb-docs{grid-template-columns:1fr}}
+@media(max-width:700px){.tb-docs{grid-template-columns:1fr}.tb-docs.reading #docList{display:none}.tb-docs.reading .tb-back{display:block}.tb-docs:not(.reading) #docView{display:none}}
 #toast{position:absolute;left:50%;top:max(14px,env(safe-area-inset-top));transform:translate(-50%,-10px);font:15px 'Special Elite',monospace;color:#ffe3c0;background:rgba(40,12,0,.8);border:1px solid rgba(255,106,19,.6);padding:7px 14px;opacity:0;transition:opacity .4s,transform .4s;pointer-events:none;white-space:nowrap}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 #tabBtn{position:relative}#tabBtn:not([data-n=""])::after{content:attr(data-n);position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--red);color:#fff;font:700 12px/20px 'Barlow Condensed',sans-serif}
@@ -2050,6 +2053,8 @@ document.addEventListener('pointerlockchange',()=>{locked=document.pointerLockEl
 const look=(dx,dy,k)=>{if(cine||MT.on)return;PL.yaw+=dx*k;PL.pitch=clamp(PL.pitch-dy*k,-1.45,1.5);};
 let joyId=null,lookId=null,lookP=null,dragM=null;const joyEl=$('#joy'),joyK=$('#joy i');
 cv.addEventListener('pointerdown',e=>{if(!playing||cine)return;
+  /* un tocco o un clic fuori dal tablet lo chiude */
+  if(el.shop.classList.contains('open')){toggleShop(false);return;}
   if(e.pointerType==='touch'){if(!TOUCH){TOUCH=true;document.body.classList.add('touch');}try{cv.setPointerCapture(e.pointerId);}catch(_){}
     if(e.clientX<innerWidth*.42&&joyId===null){joyId=e.pointerId;joyMove(e);}else if(lookId===null){lookId=e.pointerId;lookP=[e.clientX,e.clientY];}return;}
   if(!locked){lockMouse();dragM=[e.clientX,e.clientY];}else if(e.button===0)IN.dig=true;});
@@ -2091,20 +2096,20 @@ const DOCS=[
 ];
 const CAMS=[{id:'nord',n:'CAM 1 · BORDO NORD'},{id:'fondo',n:'CAM 2 · FONDO POZZO'},{id:'campo',n:'CAM 3 · CAMPO BASE'},{id:'eagle',n:'EAGLE UNO · FARO'},{id:'casco',n:'CASCO MARCHETTI',lock:()=>!G.casco}];
 const CAMV={sel:'nord',acc:0,cam:new THREE.PerspectiveCamera(58,16/9,.5,9000),rt:new THREE.WebGLRenderTarget(320,180),buf:new Uint8Array(320*180*4),img:null};
-function buildShop(){el.shop.innerHTML=`<div class="tb-bar"><span>SITO 7 · RETE MILITARE</span><span id="tbClock"></span><span id="tbBat"></span></div>
-  <nav class="tb-tabs">${TABS.map(([k,n])=>`<button class="tb-t" data-tab="${k}">${n}<i></i></button>`).join('')}<button class="tb-x" id="closeShop" aria-label="Chiudi il tablet">✕</button></nav>
+function buildShop(){el.shop.innerHTML=`<div class="tb-bar"><span>SITO 7 · RETE MILITARE</span><span id="tbClock"></span><span id="tbBat"></span><span class="tb-keys">${TOUCH?'':'Tab / Esc per chiudere'}</span></div>
+  <nav class="tb-tabs">${TABS.map(([k,n])=>`<button class="tb-t" data-tab="${k}">${n}<i></i></button>`).join('')}<button class="tb-x" id="closeShop" aria-label="Chiudi il tablet">✕ Chiudi</button></nav>
   <div class="tb-body">
   <section data-p="mac"><h3>Macchinari</h3>${UNITS.map(u=>`<button class="it" data-u="${u.id}"><span class="n"></span><span class="c"></span><span class="d"></span><span class="o"></span></button>`).join('')}
     <h3 id="techH">Tecnologie</h3>${TECH.map(t=>`<button class="it tech" data-t="${t.id}"><span class="n">${t.n}</span><span class="c"></span><span class="d">${t.d}</span><span class="o">una tantum</span></button>`).join('')}<button class="tbtn" id="resetBtn">Ricomincia da zero</button></section>
   <section data-p="son"><canvas id="sonar" width="720" height="400"></canvas><p class="tb-note" id="sonTx"></p></section>
   <section data-p="cam"><div class="tb-cams" id="camSel"></div><div class="tb-feed"><canvas id="camv" width="320" height="180"></canvas></div></section>
-  <section data-p="doc"><div class="tb-docs"><ul id="docList"></ul><article id="docView"><p class="tb-note">Seleziona un documento.</p></article></div></section></div>`;
+  <section data-p="doc"><div class="tb-docs"><ul id="docList"></ul><article id="docView"><p class="tb-note">Seleziona un documento.</p></article><button class="tbtn tb-back" id="docBack">‹ Indietro ai documenti</button></div></section></div>`;
   setTab(TAB);updShop();renderDocs();renderCams();}
 function setTab(k){TAB=k;el.shop.querySelectorAll('.tb-t').forEach(b=>b.classList.toggle('on',b.dataset.tab===k));el.shop.querySelectorAll('section[data-p]').forEach(s=>s.hidden=s.dataset.p!==k);}
 const docsOpen=()=>DOCS.filter(d=>depthOf(G.dug)>=d.d);
 function unread(){if(!G.docRead)G.docRead={};return docsOpen().filter(d=>!G.docRead[d.id]).length;}
 function renderDocs(){const ul=$('#docList');if(!ul)return;ul.innerHTML=docsOpen().map(d=>`<li><button data-doc="${d.id}" class="${G.docRead&&G.docRead[d.id]?'':'new'}">${d.t}</button></li>`).join('')+DOCS.filter(d=>depthOf(G.dug)<d.d).slice(0,2).map(()=>`<li><button disabled>${RD(16)}</button></li>`).join('');}
-function openDoc(id){const d=DOCS.find(x=>x.id===id);if(!d)return;if(!G.docRead)G.docRead={};G.docRead[id]=1;$('#docView').innerHTML=`<h4>${d.t}</h4>${d.b}`;renderDocs();sBlip();}
+function openDoc(id){const d=DOCS.find(x=>x.id===id);if(!d)return;const td=el.shop.querySelector('.tb-docs');if(td)td.classList.add('reading');if(!G.docRead)G.docRead={};G.docRead[id]=1;$('#docView').innerHTML=`<h4>${d.t}</h4>${d.b}`;renderDocs();sBlip();}
 function renderCams(){const c=$('#camSel');if(!c)return;c.innerHTML=CAMS.filter(x=>!(x.lock&&x.lock())).map(x=>`<button data-cam="${x.id}" class="${x.id===CAMV.sel?'on':''}">${x.n}</button>`).join('');}
 let lastDocs=-1;
 function docsCheck(){const n=docsOpen().length;if(lastDocs>=0&&n>lastDocs){toast('NUOVO DOCUMENTO NEL FASCICOLO · apri il tablet'+(TOUCH?'':' (Tab)'));sBlip();renderDocs();}lastDocs=n;
@@ -2173,10 +2178,11 @@ function tabletUpd(dt){if(toastT>0){toastT-=dt;if(toastT<=0)$('#toast').classLis
   if(!el.shop.classList.contains('open'))return;const c=$('#tbClock'),b=$('#tbBat');if(c)c.textContent=clock(D);if(b)b.textContent='TORCIA '+Math.round(PL.bat)+'%';
   if(TAB==='son')drawSonar();else if(TAB==='cam')drawCam(dt);}
 
-function toggleShop(force){const open=force===undefined?!el.shop.classList.contains('open'):force;el.shop.classList.toggle('open',open);if(open){IN.dig=false;try{document.exitPointerLock();}catch(_){}updShop();renderDocs();renderCams();tone(1300,1500,.05,.06,'square');}}
+function toggleShop(force){const open=force===undefined?!el.shop.classList.contains('open'):force;el.shop.classList.toggle('open',open);if(open){IN.dig=false;try{document.exitPointerLock();}catch(_){}updShop();renderDocs();renderCams();tone(1300,1500,.05,.06,'square');}else{tone(1500,1100,.05,.05,'square');if(!TOUCH)lockMouse();}}
 let resetArm=-9;
 el.shop.addEventListener('click',e=>{if(e.target.closest('#closeShop')){toggleShop(false);lockMouse();return;}
   const tb=e.target.closest('[data-tab]');if(tb){setTab(tb.dataset.tab);tone(1300,1500,.04,.04,'square');return;}
+  if(e.target.closest('#docBack')){const td=el.shop.querySelector('.tb-docs');if(td)td.classList.remove('reading');return;}
   const dc=e.target.closest('[data-doc]');if(dc){openDoc(dc.dataset.doc);return;}
   const cm=e.target.closest('[data-cam]');if(cm){CAMV.sel=cm.dataset.cam;CAMV.acc=0;renderCams();sBlip();return;}
   const rb=e.target.closest('#resetBtn');if(rb){if(T-resetArm<4){try{localStorage.removeItem(KEY);}catch(_){}location.reload();}else{resetArm=T;rb.textContent='Tocca di nuovo per cancellare lo scavo';}return;}
