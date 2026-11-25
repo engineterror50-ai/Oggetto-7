@@ -168,6 +168,13 @@ body.cinema #lbox::before,body.cinema #lbox::after{height:11vh}
 #toast{position:absolute;left:50%;top:max(14px,env(safe-area-inset-top));transform:translate(-50%,-10px);font:15px 'Special Elite',monospace;color:#ffe3c0;background:rgba(40,12,0,.8);border:1px solid rgba(255,106,19,.6);padding:7px 14px;opacity:0;transition:opacity .4s,transform .4s;pointer-events:none;white-space:nowrap}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 #tabBtn{position:relative}#tabBtn:not([data-n=""])::after{content:attr(data-n);position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--red);color:#fff;font:700 12px/20px 'Barlow Condensed',sans-serif}
+/* procedura di cantiere: una sola riga, in alto al centro, che scompare appena l'azione è fatta */
+#tut{position:absolute;left:50%;top:calc(max(14px,env(safe-area-inset-top)) + 46px);transform:translateX(-50%);max-width:min(560px,70vw);text-align:center;opacity:0;transition:opacity .6s;pointer-events:none;
+  font:15px/1.35 'Special Elite',monospace;color:#efe6d2;text-shadow:0 1px 3px #000,0 0 12px #000}
+#tut.on{opacity:1}#tut.done{opacity:0;transition:opacity 1.4s .6s}
+#tut small{display:block;font-size:11px;letter-spacing:.14em;color:var(--or);opacity:.85;margin-bottom:2px}
+#tut b{display:inline-block;min-width:22px;padding:0 6px;margin:0 2px;border:1px solid rgba(255,220,180,.55);border-radius:3px;font-weight:400;color:#fff;background:rgba(0,0,0,.35)}
+body.touch #tut{top:calc(max(14px,env(safe-area-inset-top)) + 96px)}
 /* segnalino di obiettivo: rombo pulsante sul punto, freccia sul bordo quando è fuori dallo schermo */
 #wp{position:absolute;left:0;top:0;display:none;flex-direction:column;align-items:center;gap:6px;transform:translate(-50%,-50%);font:15px/1.2 'Special Elite',monospace;color:#ffd9a8;text-shadow:0 1px 3px #000,0 0 10px #000;white-space:nowrap;pointer-events:none}
 #wp.on{display:flex}
@@ -193,6 +200,7 @@ body.intro #cap{bottom:calc(11vh + 22px);top:auto}
   <div id="prompt"></div>
   <div id="wp"><i></i><span></span></div>
   <div id="toast"></div>
+  <div id="tut"><small></small><span></span></div>
   <div id="keys">WASD muovi · Shift corri · mouse premuto scava · E usa · F torcia · Tab tablet · nel buio, punta la torcia contro di loro</div>
   <button class="tbtn" id="stopBtn" hidden>Ferma i lavori</button>
   <div id="joy"><i></i></div>
@@ -2005,7 +2013,7 @@ function nearStation(){if(!liftOK()||PL.ride||cine||MT.on)return null;const e=li
 const objDist=()=>Math.hypot(PL.x-axisX(Math.max(0,-PL.y)),PL.z/.72);
 const canDig=()=>!PL.ride&&!cine&&!MT.on&&objDist()<170&&PL.y<(D>4?-D+14:6);
 let liftHum=null;
-function use(){if(!playing)return;const s=nearStation();if(!s)return;PL.ride={u:s==='top'?1:0,dir:s==='top'?-1:1,t:0};
+function use(){if(!playing)return;const s=nearStation();if(!s)return;G.usedLift=1;PL.ride={u:s==='top'?1:0,dir:s==='top'?-1:1,t:0};
   if(AC){const o=AC.createOscillator(),g=AC.createGain(),f=AC.createBiquadFilter();o.type='sawtooth';o.frequency.value=48;f.type='lowpass';f.frequency.value=300;g.gain.value=0;g.gain.setTargetAtTime(.12,AC.currentTime,.4);o.connect(f);f.connect(g);g.connect(master);o.start();liftHum={o,g};}tone(900,600,.3,.1,'square');}
 function stopHum(){if(liftHum&&AC){liftHum.g.gain.setTargetAtTime(0,AC.currentTime,.2);const h=liftHum;setTimeout(()=>{try{h.o.stop();}catch(e){}},800);}liftHum=null;}
 /* collisione col manufatto: nello spazio locale dell'oggetto, attorno al suo asse ritorto; il raggio include collari, costole,
@@ -2052,7 +2060,7 @@ function joyMove(e){const r=joyEl.getBoundingClientRect(),cx=r.left+r.width/2,cy
 const digBtn=$('#dig');
 digBtn.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();IN.dig=true;initAudio();});['pointerup','pointercancel','pointerleave'].forEach(t=>digBtn.addEventListener(t,()=>{IN.dig=false;}));
 $('#useBtn').addEventListener('click',use);$('#lightBtn').addEventListener('click',()=>toggleTorch());$('#tabBtn').addEventListener('click',()=>toggleShop());
-function toggleTorch(){if(!PL.torch&&PL.bat<3){tone(300,200,.1,.08,'square');return;}PL.torch=!PL.torch;VMA.click=1;$('#lightBtn').classList.toggle('on',PL.torch);noise(.03,.15,3000,2);tone(2200,2000,.02,.05,'square');}
+function toggleTorch(){if(!PL.torch&&PL.bat<3){tone(300,200,.1,.08,'square');return;}PL.torch=!PL.torch;VMA.click=1;if(PL.torch)G.torchUsed=1;$('#lightBtn').classList.toggle('on',PL.torch);noise(.03,.15,3000,2);tone(2200,2000,.02,.05,'square');}
 
 /* ================= HUD ================= */
 const liftBeacon=new THREE.Mesh(beamGeo,new THREE.MeshBasicMaterial({color:new THREE.Color(3,1.2,.3),transparent:true,opacity:.3,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
@@ -2060,7 +2068,7 @@ liftBeacon.scale.set(1.1,260,1.1);liftBeacon.visible=false;scene.add(liftBeacon)
 const wpEl=$('#wp'),wpTx=$('#wp span'),_wv=V(0,0,0);
 function wpUpd(p,lbl){if(!p){wpEl.classList.remove('on');return;}_wv.copy(p).project(camera);let x=_wv.x,y=_wv.y;const behind=_wv.z>1;if(behind){x=-x;y=-y;}
   const edge=behind||Math.abs(x)>.9||Math.abs(y)>.78;if(edge){const k=1/Math.max(Math.abs(x)/.88,Math.abs(y)/.74,1e-3);x*=k;y*=k;if(behind&&Math.abs(y)<.2)y=-.74;}
-  wpEl.classList.add('on');wpEl.classList.toggle('edge',edge);wpEl.style.left=((x*.5+.5)*innerWidth)+'px';wpEl.style.top=((-y*.5+.5)*innerHeight)+'px';
+  wpEl.classList.add('on');wpEl.classList.toggle('edge',edge);wpEl.style.left=clamp((x*.5+.5)*innerWidth,140,innerWidth-140)+'px';wpEl.style.top=clamp((-y*.5+.5)*innerHeight,50,innerHeight-50)+'px';
   if(edge)wpEl.style.setProperty('--a',Math.atan2(x,y)+'rad');const t=lbl+' · '+Math.round(Math.hypot(p.x-PL.x,p.y-PL.y,p.z-PL.z))+' m';if(wpTx.textContent!==t)wpTx.textContent=t;}
 const el={depth:$('#depth'),est:$('#est'),funds:$('#funds'),rate:$('#rate'),shop:$('#shop'),stop:$('#stopBtn'),radio:$('#radio'),prompt:$('#prompt'),useBtn:$('#useBtn'),bat:$('#bat i'),
   rw:$('#radio .who'),rt:$('#radio .txt'),cine:$('#cine p'),hud:$('#hud'),mute:$('#muteBtn'),cap:$('#cap'),mt:$('#mt')};
@@ -2200,7 +2208,7 @@ function add(v){G.dug+=v;G.funds+=v;if(G.dug>=D_END){G.dug=D_END;G.done=true;}}
 let promptMsg='',promptT=0;
 function digTick(){if(!playing||G.done||cine||MT.on)return;
   if(!canDig()){if(promptT<=0){promptMsg=PL.y>-D+14&&D>4?'Scendi nel pozzo: si scava ai piedi del manufatto':'Troppo lontano: avvicinati al manufatto';promptT=2;tone(200,180,.12,.08,'square');}return;}
-  const v=tapVal();add(v);VMA.kick=1;if(Math.random()<.55)play('crumble',{vol:.3,rate:rnd(.8,1.25),lp:PL.y<-2?1800:3500});FX.shake=Math.max(FX.shake,.05);
+  const v=tapVal();add(v);VMA.kick=1;G.digN=(G.digN||0)+1;if(Math.random()<.55)play('crumble',{vol:.3,rate:rnd(.8,1.25),lp:PL.y<-2?1800:3500});FX.shake=Math.max(FX.shake,.05);
   const f=fwdV(),e=eyeV();let p=null;for(let t=1;t<14;t+=.5){const q=e.clone().addScaledVector(f,t);if(q.y<=groundAt(q.x,q.z,D)+.1){p=q;break;}}
   if(!p){p=e.clone().add(V(Math.cos(PL.yaw)*3,0,Math.sin(PL.yaw)*3));p.y=groundAt(p.x,p.z,D);}puff(p.x,p.y,p.z,3,.8,2.5,3.5);
   if(Math.random()<.35)floatTxt('+'+fmt(v)+' m³',innerWidth/2+rnd(-50,30),innerHeight/2-40);}
@@ -2390,6 +2398,27 @@ const fsBtn=$('#fsBtn');const fsLabel=()=>{fsBtn.textContent=isFull()?'Esci':'Sc
 fsBtn.addEventListener('click',()=>{isFull()?exitFull():goFull();});document.addEventListener('fullscreenchange',fsLabel);document.addEventListener('webkitfullscreenchange',fsLabel);
 $('#newBtn').addEventListener('click',()=>{startIntro();goFull();});$('#contBtn').addEventListener('click',()=>{start(true);goFull();lockMouse();});
 $('#again').addEventListener('click',()=>{try{localStorage.removeItem(KEY);}catch(_){}location.reload();});addEventListener('visibilitychange',()=>{if(document.hidden)save();});
+
+/* ================= procedura di cantiere (tutorial) =================
+   Niente pause e niente finestre: una riga in alto, scritta come un ordine di servizio, che compare solo quando la
+   meccanica serve davvero e sparisce appena il giocatore l'ha usata. Quello che riguarda i Grigi si scopre solo al
+   primo blackout. Il progresso resta nel salvataggio. */
+const K=(d,t)=>TOUCH?`<b>${t}</b>`:`<b>${d}</b>`;
+const TUT=[
+ {id:'look',show:()=>true,done:()=>(G.lookAcc||0)>1.2,tx:()=>TOUCH?'Trascina a destra dello schermo per guardarti intorno.':'Muovi il mouse per guardarti intorno. Clicca se il puntatore non è bloccato.'},
+ {id:'walk',show:()=>!canDig()&&D<22,done:()=>canDig()||D>=22,tx:()=>TOUCH?'Joystick a sinistra per camminare, spingilo fino in fondo per correre. Segui il segnalino fino ai piedi del manufatto.':'<b>W A S D</b> per camminare, <b>Shift</b> per correre. Segui il segnalino fino ai piedi del manufatto.'},
+ {id:'dig',show:()=>canDig(),done:()=>(G.digN||0)>=8,tx:()=>`Tieni premuto ${TOUCH?'<b>SCAVA</b>':'il <b>mouse</b>'} per scavare. Ogni metro cubo diventa fondi.`},
+ {id:'buy',show:()=>G.funds>=15,done:()=>(G.own.crew||0)>0,tx:()=>`Apri il tablet ${K('Tab','TABLET')} e assumi una squadra di scavo. Le macchine scavano anche quando tu ti fermi.`},
+ {id:'torch',show:()=>(G.own.crew||0)>0&&(D>8||G.funds>40),done:()=>G.torchUsed,tx:()=>`${K('F','TORCIA')} accende la torcia. Si ricarica quando è spenta.`},
+ {id:'lift',show:()=>liftOK()&&PL.y>-D+20,done:()=>G.usedLift,tx:()=>`Il fondo si raggiunge col montacarichi. Segui il segnalino e premi ${K('E','USA')} sulla piattaforma.`},
+ {id:'bo',show:()=>BO.on,done:()=>!BO.on,tx:()=>'Blackout. Non correre, non scavare: il rumore li attira. Se qualcosa si avvicina nel buio, puntagli contro la torcia.'},
+];
+const tutEl=$('#tut'),tutTx=$('#tut span'),tutHd=$('#tut small');let tutCur=null,tutLy=null;
+function tutUpd(dt){if(!G.tut)G.tut={};if(tutLy!==null){let d=PL.yaw-tutLy;d=Math.atan2(Math.sin(d),Math.cos(d));G.lookAcc=(G.lookAcc||0)+Math.abs(d);}tutLy=PL.yaw;
+  if(tutCur&&!G.tut[tutCur.id]&&tutCur.done()){G.tut[tutCur.id]=1;tutEl.classList.add('done');tutEl.classList.remove('on');tone(1600,1900,.05,.04,'sine');tutCur=null;return;}
+  if(tutCur&&!tutCur.show()&&tutCur.id!=='bo'){tutEl.classList.remove('on');tutCur=null;}
+  if(!tutCur&&!capQ&&(radioIdle()||BO.on)){const s=TUT.find(s=>!G.tut[s.id]&&s.show());if(s){tutCur=s;const i=TUT.indexOf(s)+1;tutHd.textContent='PROCEDURA DI CANTIERE · '+i+'/'+TUT.length;tutEl.classList.remove('done');tutEl.classList.add('on');}}
+  if(tutCur){const h=tutCur.tx();if(tutTx.innerHTML!==h)tutTx.innerHTML=h;}}
 
 /* ================= filmato iniziale =================
    Tre giorni fa: una scia nel cielo, l'impatto senza suono, il primo battito. Oggi: il cantiere visto dall'alto.
@@ -2586,15 +2615,15 @@ function step(dt){
     const st=nearStation(),key=TOUCH?'USA':'E';let pr='';
     if(st)pr=`<b>${key}</b> · ${st==='top'?'Scendi nel pozzo col montacarichi':'Risali in superficie'}`;else if(promptT>0)pr=promptMsg;
     else if(BO.on&&!PL.torch)pr=TOUCH?'Accendi la <b>TORCIA</b>':'Premi <b>F</b>: accendi la torcia';
-    else if(canDig()&&G.dug<400)pr=TOUCH?'Tieni premuto <b>SCAVA</b>':'Tieni premuto il <b>mouse</b> per scavare';
     else if(!TOUCH&&!locked&&!el.shop.classList.contains('open')&&!MT.on)pr='Clicca per guardarti intorno';
     /* obiettivo: il montacarichi quando serve scendere, il manufatto quando sei sul fondo ma lontano */
     {let tg=null,lb='';const onFloor=PL.y<-D+20;
       if(!PL.ride&&!MT.on&&liftOK()&&!onFloor){const e=liftEnds(D);if(Math.hypot(PL.x-e.top.x,PL.z-e.top.z)>14){tg=e.top.clone().add(V(0,5,0));lb='MONTACARICHI · scendi nel pozzo';}}
-      else if(!PL.ride&&!MT.on&&onFloor&&objDist()>=150){const ax=axisX(D),dx=PL.x-ax,dz=PL.z,dd=Math.hypot(dx,dz)||1;tg=V(ax+dx/dd*115,-D+2,dz/dd*115);lb='SCAVA QUI';}
+      else if(!PL.ride&&!MT.on&&(onFloor&&objDist()>=150||!liftOK()&&!canDig())){const ax=axisX(D),dx=PL.x-ax,dz=PL.z,dd=Math.hypot(dx,dz)||1,tx=ax+dx/dd*115,tz=dz/dd*115;tg=V(tx,groundAt(tx,tz,D)+2,tz);lb='SCAVA QUI';}
       wpUpd(tg,lb);liftBeacon.visible=!!tg&&lb[0]==='M';if(liftBeacon.visible){liftBeacon.position.copy(tg).add(V(0,-5,0));liftBeacon.material.opacity=.25+.15*Math.sin(T*4);}}
     if(el.prompt.innerHTML!==pr)el.prompt.innerHTML=pr;el.prompt.classList.toggle('on',!!pr);el.useBtn.classList.toggle('on',!!st);
     FX.slow-=dt;if(FX.slow<=0){FX.slow=.25;updShop();docsCheck();if(AC){droneG.gain.setTargetAtTime(BO.on?.02:.03+sst(0,1000,D)*.22+prox*.12,AC.currentTime,.6);windG.gain.setTargetAtTime(.07*(1-clamp(-PL.y/300,0,.7)),AC.currentTime,.8);{const nu=UNITS.reduce((s,u)=>s+(G.own[u.id]||0),0);engineG.gain.setTargetAtTime(BO.on?0:clamp(nu/12,0,1)*(PL.y<-D+25?.3:.1),AC.currentTime,BO.on?.05:.8);}revG.gain.setTargetAtTime(.35+sst(0,800,-PL.y)*.6,AC.currentTime,1);windF.frequency.setTargetAtTime(420+Math.sin(T*.3)*200,AC.currentTime,.8);}}
+    if(!MT.on)tutUpd(dt);
     FX.save-=dt;if(FX.save<=0){FX.save=5;save();}}
   /* camera */
   let ce=eyeV();if(FX.shake>0||panic>.4){const s=(FX.shake+(panic>.4?(panic-.4)*.15:0))*(RM?.08:.3);ce.add(V(rnd(-s,s),rnd(-s,s),rnd(-s,s)));}
