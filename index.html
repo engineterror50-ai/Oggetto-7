@@ -481,12 +481,18 @@ const flashL=new THREE.PointLight(0xffb060,0,500,1.6);scene.add(flashL);
 /* ================= terreno ================= */
 const R0=190,BW=30,BH=18,BF=18;
 const wob=a=>1+.05*Math.sin(3*a+.5)+.03*Math.sin(5*a+2)+.02*Math.sin(9*a+4);
-function pitH(r,Dd,w){if(Dd<=0)return 0;r/=w;if(r<=R0)return -Dd;const s=r-R0,k=Math.floor(s/BW),f=s-k*BW;return Math.min(0,-Dd+k*BH+(f>BF?(f-BF)/(BW-BF)*BH:0));}
-const rimOf=Dd=>R0+Math.ceil(Dd/BH)*BW;
+/* cava a gradoni: le terrazze stanno a quote fisse (-18, -36, ...) e, scavando, le pareti arretrano verso l'esterno
+   in modo continuo. Prima il bordo saltava di 30 m ogni 18 m di profondità e tutte le terrazze scivolavano col fondo. */
+const WALL=BW-BF;
+const rimOf=Dd=>R0+Math.max(0,Dd)/BH*BW;
+function pitH(r,Dd,w){if(Dd<=0)return 0;r/=w;const s=rimOf(Dd)-r;if(s<=0)return 0;if(r<=R0)return -Dd;
+  const k=Math.floor(s/BW),u=Math.min(1,(s-k*BW)/WALL),e=u*u*(3-2*u);return Math.max(-Dd,-(k+e)*BH);}
+/* centro della terrazza j (1 = la più alta), o null se il fondo non l'ha ancora scoperta */
+const benchAt=(j,Dd)=>j>=1&&j*BH<Dd-2?{r:rimOf(Dd)-((j-1)*BW+WALL+BF*.5),y:-j*BH}:null;
 const duneFn=(x,z)=>22*(1-Math.abs(Math.sin(x*.0016+Math.sin(z*.0011)*1.7)))*(.6+.4*Math.sin(z*.0007+x*.0003))+8*Math.sin(x*.0049+1)*Math.sin(z*.0043+2)+2.5*Math.sin((x-z)*.013)-11;
 const spoil=(r,Dd)=>Dd>0?Math.min(Dd,100)*.3*Math.exp(-(((r-rimOf(Dd)*1.04-130)/60)**2)):0;
 function groundAt(x,z,Dd){const r=Math.hypot(x,z),w=wob(Math.atan2(z,x)),p=pitH(r,Dd,w);if(p<0)return p;const rim=rimOf(Dd)*w;return (duneFn(x,z)*sst(rim+10,rim+380,r)+spoil(r,Dd))*campFlat(x,z,Dd);}
-const RAD=[];for(let r=0;r<2000;r+=(MOBILE?6:4.5))RAD.push(r);{let r=2000;while(r<11000){r*=1.045;RAD.push(r);}}
+const RAD=[];for(let r=0;r<2000;r+=(MOBILE?5:(r<1400?3:4.5)))RAD.push(r);{let r=2000;while(r<11000){r*=1.045;RAD.push(r);}}
 const NR=RAD.length,NS=MOBILE?150:200,NV=NR*NS;
 const tPos=new Float32Array(NV*3),tNrm=new Float32Array(NV*3),tCol=new Float32Array(NV*3),tUV=new Float32Array(NV*2),tR=new Float32Array(NV),tW=new Float32Array(NV),dune=new Float32Array(NV),jit=new Float32Array(NV);
 for(let i=0;i<NR;i++)for(let j=0;j<NS;j++){const v=i*NS+j,a=(j+(i%2)*.5)/NS*Math.PI*2,r=RAD[i],x=Math.cos(a)*r,z=Math.sin(a)*r;
@@ -1594,6 +1600,12 @@ const VMH0={x:.27,y:-.37,z:-.66,rx:.45,ry:-.62,rz:.07};
 VMH.position.set(VMH0.x,VMH0.y,VMH0.z);VMH.rotation.set(VMH0.rx,VMH0.ry,VMH0.rz);
 VM_RA=vmForearm();
 VM.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=false;o.frustumCulled=false;}});
+/* il fascio della torcia nella foschia: disegnato in post-processing (morbido, senza bordi netti contro il terreno);
+   qui si calcola solo fin dove arriva */
+const _bs=V(0,0,0),_bd=V(0,0,0),_bp=V(0,0,0);
+function beamLen(){camera.localToWorld(_bs.copy(torch.position));_bd.copy(torchT.position).sub(torch.position).normalize().applyQuaternion(camera.quaternion);
+  for(let t=.6;t<26;t+=.6){_bp.copy(_bs).addScaledVector(_bd,t);if(_bp.y<=groundAt(_bp.x,_bp.z,D))return t;
+    const yy=_bp.y-(OBJ.y+lift);if(yy<-1){const ax=OBJ.x+(-yy)*Math.tan(OBJ.rz);if(Math.hypot(_bp.x-ax,_bp.z/.72)<radAt(yy))return t;}}return 26;}
 /* stato delle animazioni */
 const VMA={ly:null,lp:null,sx:0,sy:0,mv:0,eng:0,kick:0,click:0,low:1,inspect:0};
 const VM_EL=V(-.42,-.62,.06),VM_ER=V(.5,-.66,.02),_vl=V(0,0,0),_vq=new THREE.Quaternion();
@@ -1625,6 +1637,8 @@ function vmUpdate(dt,tI,LV,dig,panic){
   /* il fascio della torcia vera segue la mano */
   vmTorch.getWorldPosition(_va);vmTorch.getWorldQuaternion(_vq);_vb.set(0,1,0).applyQuaternion(_vq);
   const lp=_va.clone().addScaledVector(_vb,.13);torch.position.copy(lp);_vb.lerp(V(0,-.015,-1),.55).normalize();torchT.position.copy(lp).addScaledVector(_vb,14);
+  if(tI>0){const L=beamLen(),pa=lp.clone().applyMatrix4(camera.projectionMatrix),pb=lp.clone().addScaledVector(_vb,L).applyMatrix4(camera.projectionMatrix);
+    postU.uBA.value.set(pa.x*.5+.5,pa.y*.5+.5);postU.uBB.value.set(pb.x*.5+.5,pb.y*.5+.5);postU.uBI.value=tI*(.1+.06*sst(0,600,D))*(.4+.6*sst(2,14,L));}else postU.uBI.value=0;
   VM_LENS.material.color.setScalar(tI?14*tI:.04);VM_FLARE.material.opacity=tI*.55;
   vmSpill.position.copy(lp).add(V(.03,.05,-.06));vmSpill.intensity=tI*.18;
   /* luci della scena riportate nello spazio della camera */
@@ -1727,20 +1741,27 @@ const brightMat=new THREE.ShaderMaterial({uniforms:{tDiffuse:{value:rt.texture},
 const blurMat=new THREE.ShaderMaterial({uniforms:{tDiffuse:{value:null},uDir:{value:new THREE.Vector2()}},vertexShader:FS_VS,depthTest:false,depthWrite:false,
   fragmentShader:`uniform sampler2D tDiffuse;uniform vec2 uDir;varying vec2 vUv;void main(){vec3 c=texture2D(tDiffuse,vUv).rgb*.227;
   c+=(texture2D(tDiffuse,vUv+uDir*1.385).rgb+texture2D(tDiffuse,vUv-uDir*1.385).rgb)*.316;c+=(texture2D(tDiffuse,vUv+uDir*3.231).rgb+texture2D(tDiffuse,vUv-uDir*3.231).rgb)*.07;gl_FragColor=vec4(c,1.);}`});
-const postU={tDiffuse:{value:rt.texture},tBloom:{value:bloomA.texture},uBloomK:{value:.9},uTime:{value:0},uPanic:{value:0},uRed:{value:0},uWhite:{value:0},uBlack:{value:0},uAb:{value:.0012},uExposure:{value:1.45},uRes:{value:new THREE.Vector2(innerWidth,innerHeight)}};
+const postU={tDiffuse:{value:rt.texture},tBloom:{value:bloomA.texture},uBloomK:{value:.9},uTime:{value:0},uPanic:{value:0},uRed:{value:0},uWhite:{value:0},uBlack:{value:0},uAb:{value:.0012},uExposure:{value:1.45},uBA:{value:new THREE.Vector2()},uBB:{value:new THREE.Vector2()},uBI:{value:0},uRes:{value:new THREE.Vector2(innerWidth,innerHeight)}};
 const postMat=new THREE.ShaderMaterial({uniforms:postU,vertexShader:FS_VS,depthTest:false,depthWrite:false,
-  fragmentShader:`uniform sampler2D tDiffuse,tBloom;uniform float uBloomK,uTime,uPanic,uRed,uWhite,uBlack,uAb,uExposure;uniform vec2 uRes;varying vec2 vUv;
+  fragmentShader:`uniform sampler2D tDiffuse,tBloom;uniform float uBloomK,uTime,uPanic,uRed,uWhite,uBlack,uAb,uExposure,uBI;uniform vec2 uRes,uBA,uBB;varying vec2 vUv;
+  float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);float a=fract(sin(dot(i,vec2(12.9898,78.233)))*43758.5453),b=fract(sin(dot(i+vec2(1,0),vec2(12.9898,78.233)))*43758.5453),c=fract(sin(dot(i+vec2(0,1),vec2(12.9898,78.233)))*43758.5453),d=fract(sin(dot(i+vec2(1,1),vec2(12.9898,78.233)))*43758.5453);return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}
   vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
   float hh(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
-  void main(){vec2 uv=vUv,cc=uv-.5;uv+=uPanic*.0045*vec2(sin(uv.y*18.+uTime*2.1),cos(uv.x*15.+uTime*1.6));
+  /* look da pellicola: cadenza a 24 fotogrammi per grana e tremolio del quadro, alone rosso attorno alle luci,
+     neri verde-petrolio, alte luci calde, colori smorzati */
+  void main(){float ft=floor(uTime*24.)/24.;vec2 uv=vUv+(vec2(hh(vec2(ft,1.3)),hh(vec2(ft,7.1)))-.5)*vec2(.0007,.0011),cc=uv-.5;
+   uv+=uPanic*.0045*vec2(sin(uv.y*18.+uTime*2.1),cos(uv.x*15.+uTime*1.6));
    float ca=uAb+uPanic*.008;vec3 col;col.r=texture2D(tDiffuse,uv+cc*ca).r;col.g=texture2D(tDiffuse,uv).g;col.b=texture2D(tDiffuse,uv-cc*ca).b;
-   col+=texture2D(tBloom,uv).rgb*uBloomK;col*=uExposure;col=aces(col);
-   float l=dot(col,vec3(.299,.587,.114));col=mix(vec3(l),col,.62-uPanic*.25);
-   col*=mix(vec3(.8,.96,1.02),vec3(1.07,.99,.84),smoothstep(.02,.45,l));
-   col=pow(col,vec3(1./2.2));
-   float v=smoothstep(1.05,.2,length(cc*vec2(1.,1.2)));col*=mix(.1,1.,v);
+   vec3 bl=texture2D(tBloom,uv).rgb;col+=bl*uBloomK*vec3(1.,.92,.82)+bl*vec3(.5,.07,.02)*.55;
+   if(uBI>0.){vec2 asp=vec2(uRes.x/uRes.y,1.),pa=(vUv-uBA)*asp,ab=(uBB-uBA)*asp;float t=clamp(dot(pa,ab)/max(dot(ab,ab),1e-5),0.,1.),d=length(pa-ab*t),w=.02+t*.16;
+    float hz=.45+.9*vn(vUv*asp*7.+vec2(uTime*.07,uTime*.03))*vn(vUv*asp*2.3-vec2(uTime*.02,0.));col+=vec3(1.,.95,.86)*exp(-d*d/(w*w))*pow(1.-t,1.4)*smoothstep(0.,.1,t)*hz*uBI;}
+   col*=uExposure*(1.+(hh(vec2(ft,3.7))-.5)*.035);col=aces(col);
+   float l=dot(col,vec3(.2126,.7152,.0722));col=mix(vec3(l),col,.5-uPanic*.2);
+   col*=mix(vec3(.78,1.03,.98),vec3(1.07,.99,.86),smoothstep(.03,.4,l));
+   col=pow(col,vec3(1./2.2));col=mix(col,col*col*(3.-2.*col),.4);col+=vec3(.004,.018,.016)*(1.-smoothstep(0.,.25,l*4.));
+   float v=smoothstep(1.1,.15,length(cc*vec2(1.,1.25)));col*=mix(.05,1.,v);
    col=mix(col,col*vec3(1.4,.42,.38),uRed*(1.-v*.6));col=mix(col,vec3(dot(col,vec3(.3,.59,.11))),uPanic*.3);
-   float g=hh(floor(vUv*uRes)+fract(uTime)*91.);col+=(g-.5)*(.05+uPanic*.07);
+   float lg=dot(col,vec3(.3,.59,.11));float g=hh(floor(vUv*uRes/1.6)+ft*91.7)+hh(floor(vUv*uRes/3.)+ft*37.3)-1.;col+=g*(.022+.03*(1.-lg)*lg*4.+uPanic*.06);
    col=mix(col,vec3(1.),uWhite);col=mix(col,vec3(0.),uBlack);gl_FragColor=vec4(col,1.);}`});
 const grade={uniforms:postU};
 const postScene=new THREE.Scene(),postCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1),postQuad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),postMat);postQuad.frustumCulled=false;postScene.add(postQuad);
@@ -2048,13 +2069,13 @@ function step(dt){
   FX.ln-=dt;if(FX.ln<=0&&!cine){FX.ln=rnd(12,35);FX.lnT=.5;FX.thunder=rnd(1.5,4);}
   if(FX.lnT>0){FX.lnT-=dt;skyU.uFlash.value=FX.lnT>.35||(FX.lnT<.25&&FX.lnT>.15)?rnd(.6,1.2):0;}else skyU.uFlash.value=0;
   if(FX.thunder>0){FX.thunder-=dt;if(FX.thunder<=0)sThunder(.25);}
-  moon.intensity=lerp(.32,.16,tod)*(1-ENDM*.6)+skyU.uFlash.value*1.5;moon.color.setRGB(.66,.74,1).lerp(new THREE.Color(1,.2,.15),ENDM);
-  hemi.intensity=lerp(.16,.09,tod)+skyU.uFlash.value*.8+ENDM*.2;hemi.color.setRGB(.28,.35,.48).lerp(new THREE.Color(.6,.05,.05),ENDM);
-  scene.fog.density=lerp(.0042,.0017,tod)*(1-ENDM*.7);scene.fog.color.setRGB(lerp(.027,.035,tod),lerp(.035,.015,tod),lerp(.05,.02,tod)).lerp(new THREE.Color(.12,.01,.01),ENDM);
+  moon.intensity=lerp(.24,.12,tod)*(1-ENDM*.6)+skyU.uFlash.value*1.5;moon.color.setRGB(.66,.74,1).lerp(new THREE.Color(1,.2,.15),ENDM);
+  hemi.intensity=lerp(.11,.06,tod)+skyU.uFlash.value*.8+ENDM*.2;hemi.color.setRGB(.28,.35,.48).lerp(new THREE.Color(.6,.05,.05),ENDM);
+  scene.fog.density=lerp(.0062,.0026,tod)*(1-ENDM*.7);scene.fog.color.setRGB(lerp(.024,.03,tod),lerp(.036,.022,tod),lerp(.038,.024,tod)).lerp(new THREE.Color(.12,.01,.01),ENDM);
   postU.uExposure.value=1.45+panic*.15;
   /* mondo */
-  const ax=axisX(D),nb=Math.floor(D/BH),rim=rimOf(D);
-  const onBench=o=>{if(nb>=2){const k=1+Math.floor(o.k*(nb-1));return{r:(R0+k*BW+BF*.5),y:-D+k*BH};}return null;};
+  const ax=axisX(D),nb=Math.max(0,Math.ceil((D-2)/BH)-1),rim=rimOf(D);
+  const onBench=o=>nb>=1?benchAt(1+Math.floor(o.k*nb),D):null;
   const prodOn=!BO.on&&!EVS.halt;
   for(const id in POOL)for(const o of POOL[id]){if(!o.g.visible)continue;let x,y,z;const g=o.g;
     if(id==='crew')continue;if(id==='exc'||id==='mole'){const rr=(id==='mole'?115:id==='crew'?84:100)+o.rr*45;x=ax+Math.cos(o.a)*rr;z=Math.sin(o.a)*rr;const L=Math.hypot(x,z),lim=R0*wob(Math.atan2(z,x))-18;if(L>lim){x*=lim/L;z*=lim/L;}
@@ -2091,8 +2112,8 @@ function step(dt){
     if(i===0){heliSpot.position.copy(H.h.position);heliSpot.target.position.copy(H.tgt);heliSpot.intensity=on?450:0;}});
   /* esplosioni */
   flashL.intensity=Math.max(0,flashL.intensity-dt*3000);
-  if(playing&&!cine&&prodOn&&(G.own.tnt||0)>0){FX.tnt-=dt;if(FX.tnt<=0){FX.tnt=clamp(10/G.own.tnt,.7,8)*rnd(.6,1.4);const k=nb>1?1+Math.floor(Math.random()*(nb-1)):0,a=Math.random()*Math.PI*2,r=(R0+k*BW+BF*.5)*wob(a);
-    const bx_=Math.cos(a)*r,bz=Math.sin(a)*r,by=-D+k*BH,dist=Math.hypot(bx_-PL.x,by-PL.y,bz-PL.z);puff(bx_,by,bz,30,15,8,55);flashL.position.set(bx_,by+15,bz);flashL.intensity=1500;
+  if(playing&&!cine&&prodOn&&(G.own.tnt||0)>0){FX.tnt-=dt;if(FX.tnt<=0){FX.tnt=clamp(10/G.own.tnt,.7,8)*rnd(.6,1.4);const bj=nb>=1?benchAt(1+Math.floor(Math.random()*nb),D):null,a=Math.random()*Math.PI*2,r=(bj?bj.r:R0*.8)*wob(a);
+    const bx_=Math.cos(a)*r,bz=Math.sin(a)*r,by=bj?bj.y:-D,dist=Math.hypot(bx_-PL.x,by-PL.y,bz-PL.z);puff(bx_,by,bz,30,15,8,55);flashL.position.set(bx_,by+15,bz);flashL.intensity=1500;
     if(T-FX.lastBoom>.5){FX.lastBoom=T;sBoom(clamp(60/dist,.03,.5));}FX.shake=Math.max(FX.shake,clamp(40/dist,0,.6));}}
   /* particelle */
   const e=eyeV(),f=fwdV();
