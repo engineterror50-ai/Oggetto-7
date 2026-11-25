@@ -490,7 +490,7 @@ const RAD=[];for(let r=0;r<2000;r+=(MOBILE?6:4.5))RAD.push(r);{let r=2000;while(
 const NR=RAD.length,NS=MOBILE?150:200,NV=NR*NS;
 const tPos=new Float32Array(NV*3),tNrm=new Float32Array(NV*3),tCol=new Float32Array(NV*3),tUV=new Float32Array(NV*2),tR=new Float32Array(NV),tW=new Float32Array(NV),dune=new Float32Array(NV),jit=new Float32Array(NV);
 for(let i=0;i<NR;i++)for(let j=0;j<NS;j++){const v=i*NS+j,a=(j+(i%2)*.5)/NS*Math.PI*2,r=RAD[i],x=Math.cos(a)*r,z=Math.sin(a)*r;
-  tPos[v*3]=x;tPos[v*3+2]=z;tR[v]=r;tW[v]=wob(a);dune[v]=duneFn(x,z);jit[v]=((Math.sin(x*12.9898+z*78.233)*43758.5453)%1+1)%1;}
+  tPos[v*3]=x;tPos[v*3+2]=z;tR[v]=r;tW[v]=wob(a);dune[v]=duneFn(x,z);jit[v]=clamp((pfbm(x*.045+500,z*.045+500,1e6,4)-.47)*2.4+.5,0,1);}
 const tIdx=new Uint32Array((NR-1)*NS*6);{let k=0;for(let i=0;i<NR-1;i++)for(let j=0;j<NS;j++){const a=i*NS+j,b=i*NS+(j+1)%NS,c=(i+1)*NS+j,d=(i+1)*NS+(j+1)%NS;tIdx[k++]=a;tIdx[k++]=b;tIdx[k++]=c;tIdx[k++]=b;tIdx[k++]=d;tIdx[k++]=c;}}
 const tGeo=new THREE.BufferGeometry();
 const aPos=new THREE.BufferAttribute(tPos,3).setUsage(THREE.DynamicDrawUsage),aNrm=new THREE.BufferAttribute(tNrm,3).setUsage(THREE.DynamicDrawUsage),aCol=new THREE.BufferAttribute(tCol,3).setUsage(THREE.DynamicDrawUsage),aUV=new THREE.BufferAttribute(tUV,2).setUsage(THREE.DynamicDrawUsage);
@@ -506,10 +506,11 @@ vec3 pNArb(vec3 sp,vec3 sn,vec2 dH,float fd){vec3 sx=dFdx(sp),sy=dFdy(sp);vec3 r
   .replace('#include <color_fragment>',`#include <color_fragment>
 { twall=smoothstep(.3,.8,1.-abs(vWN.y));
   float ang=atan(vWP.z,vWP.x)*length(vWP.xz);
-  vec4 nA=texture2D(uNoise,vWP.xz*.011),nB=texture2D(uNoise,vWP.xz*.08+.37),nC=texture2D(uNoise,vWP.xz*.5+.11),nV=texture2D(uNoise,vec2(ang*.05,vWP.y*.11)),nW=texture2D(uNoise,vec2(ang*.21,vWP.y*.5));
+  vec2 q1=mat2(.825,-.565,.565,.825)*vWP.xz,q2=mat2(-.416,-.909,.909,-.416)*vWP.xz,q3=mat2(.07,.998,-.998,.07)*vWP.xz;
+  vec4 nA=texture2D(uNoise,q1*.011),nB=texture2D(uNoise,q2*.08+.37),nC=texture2D(uNoise,q3*.5+.11),nV=texture2D(uNoise,vec2(ang*.05,vWP.y*.11)),nW=texture2D(uNoise,vec2(ang*.21,vWP.y*.5));
   tdn=mix(nA.g*.32+nA.b*.22+nB.r*.26+nB.g*.2, nV.r*.3+nV.g*.3+nW.b*.4, twall);
   float fine=mix(nB.b,nW.a,twall); tfine=mix(nC.r*.6+nC.g*.4,nW.g,twall);
-  diffuseColor.rgb*=.55+.9*tdn*(.75+.5*fine);
+  diffuseColor.rgb*=.66+.68*tdn*(.8+.4*fine);
   float strata=smoothstep(.5,.92,sin(vWP.y*.9+tdn*5.)*.5+.5)*step(vWP.y,-1.);
   diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(1.3,1.12,.86),strata*.55*twall);
   float dark=smoothstep(.62,.8,nV.a)*twall; diffuseColor.rgb*=1.-dark*.45;
@@ -570,16 +571,19 @@ const OBJU={uGC:{value:new THREE.Color(.3,.8,1.2)},uGlow:{value:.2},uTime:{value
 function obsidian(m,sc){m.onBeforeCompile=sh=>{Object.assign(sh.uniforms,OBJU);
   sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vOL; varying vec3 vON;').replace('#include <begin_vertex>','#include <begin_vertex>\nvOL=position; vON=normal;');
   sh.fragmentShader=sh.fragmentShader.replace('#include <common>',`#include <common>
-uniform sampler2D uNoise; uniform vec3 uGC; uniform float uGlow,uTime; varying vec3 vOL; varying vec3 vON; float oCrk,oPore,oVein,oH;
+uniform sampler2D uNoise; uniform vec3 uGC; uniform float uGlow,uTime; varying vec3 vOL; varying vec3 vON; float oCrk,oPore,oVein,oH,oHalo;
 float triN(vec3 p,vec3 w,float s,vec4 m){return dot(texture2D(uNoise,p.zy*s),m)*w.x+dot(texture2D(uNoise,p.xz*s),m)*w.y+dot(texture2D(uNoise,p.xy*s),m)*w.z;}`)
   .replace('#include <color_fragment>',`#include <color_fragment>
 { vec3 cw=pow(abs(normalize(vON)),vec3(4.)); cw/=(cw.x+cw.y+cw.z);
   float big=triN(vOL,cw,.012*${sc},vec4(.6,.4,0.,0.)), fine=triN(vOL,cw,.09*${sc},vec4(0.,.35,.4,.25)), micro=triN(vOL,cw,.45*${sc},vec4(.5,.5,0.,0.));
-  float crv=abs(triN(vOL,cw,.02*${sc},vec4(0.,0.,1.,0.))-.5), crw=fwidth(crv);
-  oCrk=(1.-smoothstep(0.,max(.018,crw*1.5),crv))*smoothstep(.42,.6,big)*(1.-smoothstep(.01,.05,crw));
+  vec3 wp=vOL+(vec3(triN(vOL,cw,.05*${sc},vec4(1.,0.,0.,0.)),triN(vOL.yzx,cw,.05*${sc},vec4(0.,1.,0.,0.)),0.)-.5)*6./${sc};
+  float crv=abs(triN(wp,cw,.012*${sc},vec4(0.,.25,.75,0.))-.5), crw=fwidth(crv);
+  float crMask=smoothstep(.46,.62,big);
+  oCrk=(1.-smoothstep(0.,max(.007,crw*1.2),crv))*crMask*(1.-smoothstep(.02,.07,crw));
+  oHalo=exp(-crv*38.)*crMask*(1.-smoothstep(.03,.1,crw));
   oPore=smoothstep(.7,.85,micro)*(1.-smoothstep(.02,.1,fwidth(micro)));
   float vv=abs(triN(vOL,cw,.007*${sc},vec4(0.,1.,0.,0.))-.5); oVein=(1.-smoothstep(0.,max(.012,fwidth(vv)*1.6),vv))*smoothstep(.35,.6,fine);
-  oH=big*.9+fine*.25+micro*.05-oCrk*.5-oPore*.15;
+  oH=big*.9+fine*.25+micro*.05-oHalo*.3-oPore*.15;
   diffuseColor.rgb*=vec3(.2,.19,.22)*(.55+big*.7)*(1.-oCrk*.6)*(1.-oPore*.4);
   float sheen=smoothstep(.55,.8,fine); diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.025,.03,.035),sheen*.5); }`)
   .replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\nroughnessFactor=clamp(.62-oH*.35+oCrk*.3,.14,1.);')
@@ -587,7 +591,9 @@ float triN(vec3 p,vec3 w,float s,vec4 m){return dot(texture2D(uNoise,p.zy*s),m)*
 { vec3 sp=-vViewPosition,sx=dFdx(sp),sy=dFdy(sp),r1=cross(sy,normal),r2=cross(normal,sx);float det=dot(sx,r1);float hh=oH*.45;vec3 grad=sign(det)*(dFdx(hh)*r1+dFdy(hh)*r2);normal=normalize(abs(det)*normal-grad); }`)
   .replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>
 { float flow=smoothstep(.2,1.,.5+.5*sin(vOL.y*.03-uTime*1.3+vOL.x*.02));
-  totalEmissiveRadiance+=uGC*(oCrk*oCrk*1.6*flow*smoothstep(.15,.6,uGlow))*uGlow+uGC*oPore*.02*uGlow; }`);};
+  float on=smoothstep(.12,.6,uGlow)*min(uGlow,1.6);
+  vec3 hot=uGC*1.1;
+  totalEmissiveRadiance+=(hot*oCrk*.9+uGC*oHalo*.3)*flow*on+uGC*oPore*.02*uGlow; }`);};
   m.customProgramCacheKey=()=>'obs'+sc;return m;}
 const objMat=obsidian(new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.5,metalness:.25,emissive:0x000000}),'1.');
 const objCrustMat=obsidian(new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.4,metalness:.3,emissive:0x000000}),'3.');
@@ -1479,31 +1485,156 @@ function workersUpd(dt){const ax=axisX(D);
     if(w.h.userData.lamp)w.h.userData.lamp.material.opacity=1;
     if(w.zone==='floor'&&mode==='work'&&Math.random()<dt*.5)puff(w.x+Math.cos(w.yaw)*.8,w.y,w.z-Math.sin(w.yaw)*.8,2,.4,1.2,2.5);}}
 function takeWorker(w){if(w.gone)return;w.gone=true;w.h.visible=false;const hm=new THREE.Mesh(helmetGeo,w.kind==='agent'?HM.helmW:HM.helm);hm.position.set(w.x,w.y+.04,w.z);hm.rotation.set(rnd(-.4,.4),rnd(0,6),Math.PI*.9);hm.castShadow=true;scene.add(hm);helmetsDropped.push(hm);}
-/* ================= mani in prima persona ================= */
-const VM=new THREE.Group();camera.add(VM);const VMH=new THREE.Group(),VMT=new THREE.Group();VM.add(VMH,VMT);
-{const steelD=new THREE.MeshStandardMaterial({color:0x3c4045,roughness:.42,metalness:.85}),steelL=new THREE.MeshStandardMaterial({color:0x8a8e92,roughness:.3,metalness:.95}),blk=new THREE.MeshStandardMaterial({color:0x111214,roughness:.85}),
-    glove=dirty(0x5a4630,.95,0),sleeve=dirty(0x262b31,.92,0),cuff=new THREE.MeshStandardMaterial({color:0x9c9c8c,emissive:0x5a5a48,emissiveIntensity:.4,roughness:.35});
-  const seg=(g,a,b,r,mat)=>{const d=b.clone().sub(a),L=d.length();const m=new THREE.Mesh(capsuleGeo(r,Math.max(.001,L-2*r)),mat);m.position.copy(a).lerp(b,.5);m.quaternion.setFromUnitVectors(UP,d.normalize());g.add(m);return m;};
-  /* martello pneumatico, asse lungo y locale */
-  const prof=[[0,-.25],[.04,-.25],[.05,-.22],[.054,.2],[.06,.22],[.06,.28],[.045,.32],[0,.32]].map(([r,y])=>new THREE.Vector2(r,y));
-  VMH.add(new THREE.Mesh(new THREE.LatheGeometry(prof,24),steelD));for(let y=-.18;y<.18;y+=.024)VMH.add(part(new THREE.CylinderGeometry(.064,.064,.01,24),steelD,0,y,0,false));
-  VMH.add(part(new THREE.CylinderGeometry(.016,.018,.34,12),steelL,0,-.42,0,false));VMH.add(part(new THREE.ConeGeometry(.018,.05,4).rotateX(Math.PI),steelL,0,-.61,0,false));
-  VMH.add(part(new THREE.CylinderGeometry(.03,.03,.08,16),steelL,0,.36,0,false));VMH.add(part(new THREE.CylinderGeometry(.017,.017,.36,12).rotateZ(Math.PI/2),steelL,0,.4,0,false));
-  for(const s of [-1,1])VMH.add(part(new THREE.CylinderGeometry(.026,.026,.11,16).rotateZ(Math.PI/2),blk,s*.14,.4,0,false));
-  VMH.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(.05,.2,0),V(.12,.12,.04),V(.2,-.1,.1),V(.3,-.5,.2)]),24,.016,8),blk));
-  /* mano destra sull'impugnatura, manica che esce verso l'angolo */
-  VMH.add(part(rbox(.1,.075,.09,.025),glove,.14,.4,.005,false));const thR=part(capsuleGeo(.014,.035),glove,.11,.385,.05,false);thR.rotation.x=1.2;VMH.add(thR);
-  seg(VMH,V(.17,.37,.02),V(.42,.05,.42),.05,sleeve);seg(VMH,V(.19,.345,.05),V(.21,.33,.07),.054,cuff);
-  VMH.position.set(.25,-.74,-.78);VMH.rotation.set(.32,0,-.06);
-  /* torcia, asse y locale = avanti */
-  const tb=[[0,0],[.019,0],[.02,.17],[.024,.19],[.033,.23],[.034,.26],[.03,.265],[0,.265]].map(([r,y])=>new THREE.Vector2(r,y));VMT.add(new THREE.Mesh(new THREE.LatheGeometry(tb,20),blk));
-  for(let y=.03;y<.15;y+=.012)VMT.add(part(new THREE.CylinderGeometry(.0205,.0205,.005,16),steelD,0,y,0,false));
-  const lens=part(new THREE.CircleGeometry(.029,20),new THREE.MeshBasicMaterial({color:new THREE.Color(1.2,1.15,1)}),0,.262,0,false);lens.rotation.x=-Math.PI/2;VMT.add(lens);VMT.userData.lens=lens;
-  const rim=part(new THREE.TorusGeometry(.032,.004,6,20).rotateX(Math.PI/2),steelL,0,.262,0,false);VMT.add(rim);
-  VMT.add(part(rbox(.085,.1,.085,.03),glove,0,.09,0,false));const thL=part(capsuleGeo(.014,.035),glove,.035,.11,.02,false);VMT.add(thL);
-  seg(VMT,V(-.01,.03,-.01),V(-.16,-.42,-.18),.05,sleeve);seg(VMT,V(-.02,.01,-.02),V(-.04,-.03,-.04),.054,cuff);
-  VMT.position.set(-.23,-.34,-.5);VMT.rotation.set(-Math.PI/2+.1,0,.06);}
-VM.traverse(o=>{if(o.isMesh){o.renderOrder=10;o.castShadow=false;}});
+/* ================= mani in prima persona =================
+   Disegnate in un secondo passaggio (vmScene) dopo il mondo, con lo z-buffer pulito: le mani non entrano più
+   nei muri e la loro scala non cambia con il FOV. Le coordinate sono quelle della camera:
+   x a destra, y in alto, -z avanti. Le luci della scena vengono ricopiate qui ogni frame. */
+const vmScene=new THREE.Scene(),vmCam=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.01,10);vmScene.add(vmCam);
+const VM=new THREE.Group();vmScene.add(VM);const VMH=new THREE.Group(),VMT=new THREE.Group();VM.add(VMH,VMT);
+const vmHemi=new THREE.HemisphereLight(0x5a6878,0x0c0a08,.3);vmScene.add(vmHemi);
+const vmKey=new THREE.DirectionalLight(0xffa860,0),vmMoon=new THREE.DirectionalLight(0x8494b4,0),vmGlowD=new THREE.DirectionalLight(0xff2030,0);
+vmScene.add(vmKey,vmMoon,vmGlowD);const vmSpill=new THREE.PointLight(0xe6ecff,0,.8,2);vmScene.add(vmSpill);
+const VMM={
+  glove:HK(0x6b5034,{r:.82,grime:.45,bump:.25,sc:3,vr:.15}),gloveD:HK(0x3e2e1e,{r:.88,grime:.3,bump:.2,sc:3,vr:.1}),
+  sleeve:HK(0x2a3036,{r:.96,grime:.35,bump:.6,sc:2.5,vr:.12}),cuff:HK(0x16191c,{r:.9,grime:.2,bump:.8,sc:3}),refl:HM.refl,
+  blk:kmat(0x1a1b1d,{r:.4,m:.6,chip:.12,rust:0,grime:.25,bump:.3,sc:3,lowK:0,vr:.1,under:0x55585c}),
+  alu:kmat(0x9ea2a6,{r:.28,m:.95,chip:0,rust:0,grime:.3,bump:.2,sc:3,lowK:0,vr:.1}),
+  yel:kmat(0xc08c12,{r:.5,m:.25,chip:.35,rust:.25,grime:.55,bump:.5,sc:2.2,lowK:0,vr:.2}),
+  stl:kmat(0x55595d,{r:.38,m:.85,chip:0,rust:.25,grime:.45,bump:.4,sc:2.5,lowK:0,vr:.15,under:0x3a2a1e}),
+  rub:kmat(0x121212,{r:.9,m:0,chip:0,rust:0,grime:.25,bump:.6,sc:3,lowK:0,vr:.08}),
+  lens:new THREE.MeshBasicMaterial({color:new THREE.Color(.05,.05,.05)}),
+  refl2:new THREE.MeshStandardMaterial({color:0xd8dce0,roughness:.12,metalness:1}),
+};
+const vmAdd=(g,geo,mat,x=0,y=0,z=0,rx=0,ry=0,rz=0)=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.rotation.set(rx,ry,rz);g.add(m);return m;};
+const vmLathe=(prof,seg=28)=>new THREE.LatheGeometry(prof.map(([r,y])=>new THREE.Vector2(Math.max(r,1e-4),y)),seg);
+/* cilindro rastremato tra due punti */
+function vmSeg(g,a,b,r0,r1,mat,seg=12){const d=b.clone().sub(a),L=d.length(),m=new THREE.Mesh(new THREE.CylinderGeometry(r1,r0,L,seg),mat);
+  m.position.copy(a).addScaledVector(d,.5);m.quaternion.setFromUnitVectors(UP,d.normalize());g.add(m);
+  const c=new THREE.Mesh(new THREE.SphereGeometry(r1,seg,Math.max(6,seg>>1)),mat);c.position.copy(b);g.add(c);return m;}
+/* pugno guantato attorno a una barra lungo l'asse y locale; il palmo sta sul lato -x.
+   Restituisce il gruppo e un punto "polso" da cui parte l'avambraccio. */
+function vmFist(rb){const h=new THREE.Group(),G=VMM.glove;
+  const FY=[.032,.0105,-.011,-.031],FT=[.0105,.0113,.0108,.0093];
+  FY.forEach((y,i)=>{const t=FT[i],R=rb+t*.9,a0=(108+i*5)*Math.PI/180,arc=(252-i*9)*Math.PI/180;
+    /* le tre falangi: un toro aperto attorno alla barra, con le nocche gonfie del guanto */
+    const g=new THREE.TorusGeometry(R,t,9,26,arc);g.rotateX(Math.PI/2);g.rotateY(a0);vmAdd(h,g,G,0,y,0);
+    const ka=arc-a0;vmAdd(h,new THREE.SphereGeometry(t*1.22,12,9),G,Math.cos(ka)*R*1.02,y,Math.sin(ka)*R*1.02).scale.set(1,.9,1);
+    const ma=ka-1.25;vmAdd(h,new THREE.SphereGeometry(t*1.08,10,8),G,Math.cos(ma)*R,y,Math.sin(ma)*R);
+    const tip=new THREE.SphereGeometry(t*.98,10,8);vmAdd(h,tip,G,Math.cos(-a0)*R,y,Math.sin(-a0)*R);
+    /* cucitura scura sul dorso del dito */
+    const sg=new THREE.TorusGeometry(R+t*.62,t*.16,4,18,arc*.55);sg.rotateX(Math.PI/2);sg.rotateY(a0-arc*.45);vmAdd(h,sg,VMM.gloveD,0,y,0);});
+  /* palmo e dorso della mano */
+  vmAdd(h,kRB(.03,.088,.074,.012),G,-(rb+.014),0,-.004);
+  vmAdd(h,kRB(.024,.094,.08,.012),VMM.gloveD,-(rb+.028),.002,.004,0,0,.05);
+  for(const y of [-.022,0,.022])vmAdd(h,kRB(.006,.016,.06,.003),VMM.glove,-(rb+.04),y,.006);
+  /* pollice: base carnosa sul palmo, poi due falangi che si appoggiano sopra le dita */
+  const tb=V(-(rb+.012),.038,.028),tm=V(-(rb*.35),.058,rb+.016),tt=V(rb*.35,.072,rb+.008);
+  vmAdd(h,new THREE.SphereGeometry(.019,12,10),G,tb.x,tb.y-.006,tb.z-.004).scale.set(1,1.3,1);
+  vmSeg(h,tb,tm,.0125,.0118,G,10);vmSeg(h,tm,tt,.0118,.0105,G,10);
+  /* polsino del guanto */
+  const wrist=new THREE.Object3D();wrist.position.set(-(rb+.022),-.006,-.036);h.add(wrist);
+  return{h,wrist};}
+/* avambraccio dinamico: dal polso verso il gomito, ricalcolato ogni frame (segue il tremolio dell'attrezzo) */
+function vmForearm(){const g=new THREE.Group();VM.add(g);
+  const sl=new THREE.Mesh(new THREE.CylinderGeometry(.058,.044,1,20,1).translate(0,.5,0),VMM.sleeve);sl.position.y=.075;g.add(sl);
+  vmAdd(g,new THREE.CylinderGeometry(.045,.04,.085,18).translate(0,.042,0),VMM.glove);
+  vmAdd(g,new THREE.CylinderGeometry(.047,.047,.016,18),VMM.gloveD,0,.08,0);
+  vmAdd(g,new THREE.CylinderGeometry(.049,.048,.03,18),VMM.cuff,0,.095,0);
+  vmAdd(g,new THREE.CylinderGeometry(.054,.053,.035,20),VMM.refl,0,.27,0);
+  const fold=new THREE.TorusGeometry(.048,.006,5,20);fold.rotateX(Math.PI/2);for(const y of [.14,.19,.33])vmAdd(g,fold,VMM.sleeve,0,y,0).scale.setScalar(1+(y-.14)*.18);
+  return{g,sl};}
+const _va=V(0,0,0),_vb=V(0,0,0);
+function vmAim(arm,wristObj,elbow){wristObj.getWorldPosition(_va);_vb.copy(elbow).sub(_va);const L=_vb.length();arm.g.position.copy(_va);arm.g.quaternion.setFromUnitVectors(UP,_vb.divideScalar(L));arm.sl.scale.set(1,Math.max(.05,L-.075),1);}
+
+/* ---- torcia nella mano sinistra (asse y = avanti) ---- */
+const vmTorch=new THREE.Group();VMT.add(vmTorch);vmTorch.rotation.x=-Math.PI/2;
+let VM_LENS,VM_FLARE,VM_LW,VM_LA,VM_RW,VM_RA;
+{const T=vmTorch;
+  vmAdd(T,vmLathe([[0,-.118],[.012,-.119],[.0175,-.116],[.019,-.11],[.019,-.088],[.0172,-.084],[.0172,.058],[.0188,.062],[.0188,.076],[.0215,.08],[.0285,.112],[.0305,.118],[.0305,.134],[.028,.136],[.0262,.132]]),VMM.blk);
+  for(let y=-.07;y<.05;y+=.0075)vmAdd(T,new THREE.CylinderGeometry(.0179,.0179,.0032,20),VMM.blk,0,y,0);
+  vmAdd(T,vmLathe([[0,-.126],[.009,-.126],[.0115,-.121],[.012,-.116],[0,-.116]],18),VMM.rub);
+  const bz=new THREE.TorusGeometry(.0292,.0034,8,30);bz.rotateX(Math.PI/2);vmAdd(T,bz,VMM.alu,0,.135,0);
+  for(let i=0;i<6;i++){const a=i/6*Math.PI*2;vmAdd(T,new THREE.BoxGeometry(.006,.006,.006),VMM.alu,Math.cos(a)*.03,.137,Math.sin(a)*.03);}
+  /* riflettore e lente: il LED si accende davvero (emissivo HDR che il bloom trasforma in alone) */
+  vmAdd(T,vmLathe([[.0055,.112],[.0255,.131],[.0255,.1315],[.0055,.1125]],24),VMM.refl2).material.side=THREE.DoubleSide;
+  VM_LENS=vmAdd(T,new THREE.CircleGeometry(.0058,16),VMM.lens,0,.1135,0,-Math.PI/2);
+  VM_FLARE=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:new THREE.Color(1.5,1.45,1.3),transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));VM_FLARE.scale.setScalar(.075);VM_FLARE.position.y=.142;T.add(VM_FLARE);
+  vmAdd(T,kRB(.013,.02,.008,.003),VMM.rub,0,.03,.0185);vmAdd(T,kRB(.006,.06,.003,.001),VMM.alu,-.0175,-.035,.004,0,0,.0);
+  const lr=new THREE.TorusGeometry(.008,.0016,6,14);vmAdd(T,lr,VMM.alu,0,-.13,0);
+  const f=vmFist(.0182);f.h.position.y=-.035;T.add(f.h);VM_LW=f.wrist;}
+VMT.position.set(-.2,-.19,-.47);VMT.rotation.set(.06,.13,.14);
+VM_LA=vmForearm();
+
+/* ---- martello pneumatico nella mano destra (asse y = verso l'impugnatura) ---- */
+const vmHam=new THREE.Group();VMH.add(vmHam);
+{const H=vmHam,Y=VMM.yel;
+  /* corpo: carter giallo, alettatura di raffreddamento, canna e scalpello */
+  vmAdd(H,vmLathe([[0,-.2],[.045,-.2],[.056,-.17],[.062,-.12],[.062,.1],[.06,.15],[.058,.2],[.05,.222],[.034,.233],[0,.235]],30),Y);
+  for(let i=0;i<9;i++)vmAdd(H,new THREE.CylinderGeometry(.0705,.0705,.007,30),VMM.stl,0,-.1+i*.021,0);
+  vmAdd(H,kRB(.05,.07,.03,.008),VMM.stl,0,.12,.055);vmAdd(H,kRB(.03,.02,.016,.005),VMM.blk,0,.06,.064);
+  vmAdd(H,new THREE.CylinderGeometry(.04,.046,.22,24),VMM.stl,0,-.3,0);vmAdd(H,new THREE.CylinderGeometry(.048,.048,.02,24),VMM.blk,0,-.205,0);
+  vmAdd(H,new THREE.CylinderGeometry(.03,.036,.08,6),VMM.stl,0,-.44,0);vmAdd(H,new THREE.CylinderGeometry(.015,.015,.32,6),VMM.stl,0,-.64,0);
+  vmAdd(H,new THREE.ConeGeometry(.015,.06,6).rotateX(Math.PI),VMM.stl,0,-.83,0);
+  /* stelo e manubrio a T con manopole in gomma */
+  vmAdd(H,new THREE.CylinderGeometry(.022,.026,.08,16),VMM.stl,0,.27,0);
+  vmAdd(H,new THREE.CylinderGeometry(.018,.018,.46,16).rotateZ(Math.PI/2),VMM.stl,0,.315,0);
+  vmAdd(H,kRB(.07,.04,.05,.012),Y,0,.315,0);
+  for(const s of [-1,1]){vmAdd(H,new THREE.CylinderGeometry(.025,.025,.11,18).rotateZ(Math.PI/2),VMM.rub,s*.17,.315,0);
+    for(let k=0;k<5;k++)vmAdd(H,new THREE.TorusGeometry(.025,.0028,5,16).rotateY(Math.PI/2),VMM.rub,s*(.125+k*.022),.315,0);
+    vmAdd(H,new THREE.CylinderGeometry(.027,.027,.012,18).rotateZ(Math.PI/2),VMM.blk,s*.231,.315,0);}
+  /* leva dell'aria sotto la manopola destra */
+  const lv=vmAdd(H,kRB(.085,.012,.022,.004),VMM.blk,.165,.284,.004);lv.rotation.z=-.08;lv.name='lever';
+  /* tubo dell'aria: esce dal fianco e scende fuori campo */
+  kTube(H,[[.058,.05,.02],[.11,.03,.06],[.2,-.12,.16],[.3,-.45,.28],[.36,-.9,.35]],.0135,VMM.rub,8);
+  vmAdd(H,new THREE.CylinderGeometry(.018,.018,.03,12).rotateZ(Math.PI/2),VMM.alu,.068,.05,.02);
+  /* targhetta */
+  vmAdd(H,new THREE.PlaneGeometry(.05,.03),kPlate(['O-7','90 PSI'],'#1a1a1a','#c8b020'),0,.16,.0605);
+  const f=vmFist(.0255);f.h.scale.z=-1;f.h.rotation.z=-Math.PI/2;f.h.position.set(.17,.315,0);H.add(f.h);VM_RW=f.wrist;}
+const VMH0={x:.27,y:-.37,z:-.66,rx:.45,ry:-.62,rz:.07};
+VMH.position.set(VMH0.x,VMH0.y,VMH0.z);VMH.rotation.set(VMH0.rx,VMH0.ry,VMH0.rz);
+VM_RA=vmForearm();
+VM.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=false;o.frustumCulled=false;}});
+/* stato delle animazioni */
+const VMA={ly:null,lp:null,sx:0,sy:0,mv:0,eng:0,kick:0,click:0,low:1,inspect:0};
+const VM_EL=V(-.42,-.62,.06),VM_ER=V(.5,-.66,.02),_vl=V(0,0,0),_vq=new THREE.Quaternion();
+function vmUpdate(dt,tI,LV,dig,panic){
+  if(VMA.ly===null){VMA.ly=PL.yaw;VMA.lp=PL.pitch;}
+  let dy=PL.yaw-VMA.ly;dy=Math.atan2(Math.sin(dy),Math.cos(dy));const dp=PL.pitch-VMA.lp;VMA.ly=PL.yaw;VMA.lp=PL.pitch;
+  const idt=dt>1e-4?1/dt:0,ks=Math.min(1,dt*10);
+  /* inerzia dello sguardo: le mani restano un attimo indietro */
+  VMA.sx+=(clamp(-dy*idt*.016,-.06,.06)-VMA.sx)*ks;VMA.sy+=(clamp(-dp*idt*.013,-.045,.045)-VMA.sy)*ks;
+  const mv=Math.hypot(IN.f-IN.jy,IN.s+IN.jx)>.05&&!PL.ride,run=mv&&(IN.run||(TOUCH&&Math.hypot(IN.jx,IN.jy)>.92));
+  VMA.mv+=((mv?(run?1.7:1):0)-VMA.mv)*Math.min(1,dt*6);
+  const shopOpen=el.shop.classList.contains('open');
+  VMA.low+=(((shopOpen||MT.on)?1:PL.ride?.35:0)-VMA.low)*Math.min(1,dt*(shopOpen?7:3.5));
+  VMA.eng+=((dig?1:0)-VMA.eng)*Math.min(1,dt*(dig?14:6));VMA.kick*=Math.exp(-dt*22);VMA.click*=Math.exp(-dt*12);
+  const b=PL.bob,m=VMA.mv,br=Math.sin(T*1.7),lo=sst(0,1,VMA.low);
+  const bx=Math.cos(b*.5)*.016*m,by=-Math.abs(Math.sin(b*.5))*.017*m+br*.0025,roll=Math.sin(b*.5)*.035*m;
+  const trem=panic>.45?(panic-.45)*.012:0,tr=()=>rnd(-trem,trem);
+  /* martello: spinta in avanti mentre lavora, vibrazione ad alta frequenza, contraccolpo a ogni colpo */
+  const e=VMA.eng,vib=e*(Math.sin(T*97)*.6+Math.sin(T*61.3)*.4);
+  VMH.position.set(VMH0.x+VMA.sx+bx+vib*.0035+tr(),VMH0.y+VMA.sy+by-e*.035+vib*.006+VMA.kick*.022-lo*.42,VMH0.z-e*.05+Math.abs(vib)*.004-VMA.kick*.01);
+  VMH.rotation.set(VMH0.rx+e*.12-VMA.kick*.05+VMA.sy*1.6+lo*.5,VMH0.ry+VMA.sx*2+vib*.008,VMH0.rz+roll+vib*.012);
+  const lever=vmHam.getObjectByName('lever');if(lever)lever.rotation.z=-.08+e*.07;
+  /* torcia: più ferma, ma trema col corpo, scatta quando premi l'interruttore */
+  VMT.position.set(-.2+VMA.sx*1.2+bx*1.1+vib*.0012+tr(),-.19+VMA.sy*1.2+by*1.2-VMA.click*.012+vib*.002-lo*.38,-.47+VMA.click*.008);
+  VMT.rotation.set(.06+VMA.sy*1.4-VMA.click*.09+lo*.6,.13+VMA.sx*1.6,.14-roll*.8+br*.004+tr()*3);
+  VM.updateMatrixWorld(true);
+  _vl.copy(VM_EL).add(V(VMA.sx*.6+bx*.5,VMA.sy*.6-lo*.4,0));vmAim(VM_LA,VM_LW,_vl);
+  _vl.copy(VM_ER).add(V(VMA.sx*.6+bx*.5+vib*.002,VMA.sy*.6-e*.03-lo*.4,0));vmAim(VM_RA,VM_RW,_vl);
+  /* il fascio della torcia vera segue la mano */
+  vmTorch.getWorldPosition(_va);vmTorch.getWorldQuaternion(_vq);_vb.set(0,1,0).applyQuaternion(_vq);
+  const lp=_va.clone().addScaledVector(_vb,.13);torch.position.copy(lp);_vb.lerp(V(0,-.015,-1),.55).normalize();torchT.position.copy(lp).addScaledVector(_vb,14);
+  VM_LENS.material.color.setScalar(tI?14*tI:.04);VM_FLARE.material.opacity=tI*.55;
+  vmSpill.position.copy(lp).add(V(.03,.05,-.06));vmSpill.intensity=tI*.18;
+  /* luci della scena riportate nello spazio della camera */
+  const cq=camera.quaternion.clone().invert();
+  vmHemi.color.copy(hemi.color);vmHemi.groundColor.copy(hemi.groundColor);vmHemi.intensity=hemi.intensity*1.4;vmHemi.position.copy(UP).applyQuaternion(cq);
+  vmMoon.color.copy(moon.color);vmMoon.intensity=moon.intensity*.9;vmMoon.position.copy(skyU.uMoon.value).applyQuaternion(cq);
+  let best=null,bs=0;for(const l of pool){if(l.intensity<=0)continue;const d2=l.position.distanceToSquared(camera.position),s=l.intensity/(1+d2);if(s>bs){bs=s;best=l;}}
+  vmKey.intensity=clamp(bs*.35,0,1.6);if(best){vmKey.color.copy(best.color);vmKey.position.copy(best.position).sub(camera.position).normalize().applyQuaternion(cq);}
+  const gd2=glowL.position.distanceToSquared(camera.position);vmGlowD.color.copy(glowL.color);vmGlowD.intensity=clamp(glowL.intensity/(1+gd2)*1.5,0,2.5);
+  vmGlowD.position.copy(glowL.position).sub(camera.position).normalize().applyQuaternion(cq);}
 
 /* ================= torri faro a traliccio ================= */
 const towerTpl=(()=>{const g=mkFloodTower(),H=30;const s=new THREE.Sprite(floodHaloMat);s.scale.set(7,5,7);s.position.set(0,H+1.4,1.0);g.add(s);
@@ -1617,11 +1748,12 @@ const bloomTexel=new THREE.Vector2();
 function sizeTargets(){const w=Math.max(4,Math.floor(innerWidth*PR/4)),h=Math.max(4,Math.floor(innerHeight*PR/4));bloomA.setSize(w,h);bloomB.setSize(w,h);brightMat.uniforms.uTexel.value.set(1/(innerWidth*PR),1/(innerHeight*PR));bloomTexel.set(1/w,1/h);}
 sizeTargets();
 function renderFrame(){renderer.setRenderTarget(rt);renderer.render(scene,camera);
+  if(VM.visible){renderer.autoClear=false;renderer.clearDepth();renderer.render(vmScene,vmCam);renderer.autoClear=true;}
   postQuad.material=brightMat;renderer.setRenderTarget(bloomA);renderer.render(postScene,postCam);postQuad.material=blurMat;
   for(const k of [1,2.2]){blurMat.uniforms.tDiffuse.value=bloomA.texture;blurMat.uniforms.uDir.value.set(bloomTexel.x*k,0);renderer.setRenderTarget(bloomB);renderer.render(postScene,postCam);
     blurMat.uniforms.tDiffuse.value=bloomB.texture;blurMat.uniforms.uDir.value.set(0,bloomTexel.y*k);renderer.setRenderTarget(bloomA);renderer.render(postScene,postCam);}
   postQuad.material=postMat;renderer.setRenderTarget(null);renderer.render(postScene,postCam);}
-function resize(){PR=DPR*qScale;renderer.setPixelRatio(PR);renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+function resize(){PR=DPR*qScale;renderer.setPixelRatio(PR);renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();vmCam.aspect=camera.aspect;vmCam.updateProjectionMatrix();
   rt.setSize(Math.floor(innerWidth*PR),Math.floor(innerHeight*PR));sizeTargets();postU.uRes.value.set(innerWidth,innerHeight);}
 addEventListener('resize',resize);
 
@@ -1681,7 +1813,7 @@ function joyMove(e){const r=joyEl.getBoundingClientRect(),cx=r.left+r.width/2,cy
 const digBtn=$('#dig');
 digBtn.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();IN.dig=true;initAudio();});['pointerup','pointercancel','pointerleave'].forEach(t=>digBtn.addEventListener(t,()=>{IN.dig=false;}));
 $('#useBtn').addEventListener('click',use);$('#lightBtn').addEventListener('click',()=>toggleTorch());$('#tabBtn').addEventListener('click',()=>toggleShop());
-function toggleTorch(){if(!PL.torch&&PL.bat<3){tone(300,200,.1,.08,'square');return;}PL.torch=!PL.torch;$('#lightBtn').classList.toggle('on',PL.torch);noise(.03,.15,3000,2);tone(2200,2000,.02,.05,'square');}
+function toggleTorch(){if(!PL.torch&&PL.bat<3){tone(300,200,.1,.08,'square');return;}PL.torch=!PL.torch;VMA.click=1;$('#lightBtn').classList.toggle('on',PL.torch);noise(.03,.15,3000,2);tone(2200,2000,.02,.05,'square');}
 
 /* ================= HUD ================= */
 const el={depth:$('#depth'),est:$('#est'),funds:$('#funds'),rate:$('#rate'),shop:$('#shop'),stop:$('#stopBtn'),radio:$('#radio'),prompt:$('#prompt'),useBtn:$('#useBtn'),bat:$('#bat i'),
@@ -1721,7 +1853,7 @@ function add(v){G.dug+=v;G.funds+=v;if(G.dug>=D_END){G.dug=D_END;G.done=true;}}
 let promptMsg='',promptT=0;
 function digTick(){if(!playing||G.done||cine||MT.on)return;
   if(!canDig()){if(promptT<=0){promptMsg=PL.y>-D+14&&D>4?'Scendi nel pozzo: si scava ai piedi del manufatto':'Troppo lontano: avvicinati al manufatto';promptT=2;tone(200,180,.12,.08,'square');}return;}
-  const v=tapVal();add(v);noise(.07,.32,600+Math.random()*500,1.4);tone(140,60,.07,.22,'square');FX.shake=Math.max(FX.shake,.05);
+  const v=tapVal();add(v);VMA.kick=1;noise(.07,.32,600+Math.random()*500,1.4);tone(140,60,.07,.22,'square');FX.shake=Math.max(FX.shake,.05);
   const f=fwdV(),e=eyeV();let p=null;for(let t=1;t<14;t+=.5){const q=e.clone().addScaledVector(f,t);if(q.y<=groundAt(q.x,q.z,D)+.1){p=q;break;}}
   if(!p){p=e.clone().add(V(Math.cos(PL.yaw)*3,0,Math.sin(PL.yaw)*3));p.y=groundAt(p.x,p.z,D);}puff(p.x,p.y,p.z,3,.8,2.5,3.5);
   if(Math.random()<.35)floatTxt('+'+fmt(v)+' m³',innerWidth/2+rnd(-50,30),innerHeight/2-40);}
@@ -1909,7 +2041,7 @@ function step(dt){
   const gu=sst(0,1000,D);GC.copy(gu<.5?GLOWC[0].clone().lerp(GLOWC[1],gu*2):GLOWC[1].clone().lerp(GLOWC[2],(gu-.5)*2));
   let pulse=1;if(G.heart)pulse=.55+FX.vig*.9;else if(G.pulse)pulse=.7+.3*Math.sin(T*Math.PI*2/1.2);
   GI=(.15+gu*.6)*pulse+(FX.pulseT>0?FX.pulseT*1.5:0)+(BO.on?.4+.3*Math.sin(T*2):0)+(cine?2:0);
-  OBJU.uGC.value.copy(GC);OBJU.uGlow.value=(EVS.glow||0)+GI*.32+(FX.pulseT>0?FX.pulseT*.6:0)+(BO.on?.35+.25*Math.sin(T*2):0)+(cine?1.5:0);OBJU.uTime.value=T;EYE_MAT.color.copy(GC).multiplyScalar((.5+GI*2.5)*(EVS.eyes||1));
+  OBJU.uGC.value.copy(GC);OBJU.uGlow.value=(EVS.glow||0)+GI*.32+(FX.pulseT>0?FX.pulseT*.6:0)+(BO.on?.35+.25*Math.sin(T*2):0)+(cine?1.5:0);OBJU.uTime.value=T;EYE_MAT.color.copy(GC).multiplyScalar(Math.min(2.4,(.45+GI*1.5)*(EVS.eyes||1)));
   glowL.position.set(axisX(D),-D+60+lift*.5,0);glowL.color.copy(GC);glowL.intensity=GI*sst(30,600,D)*2200+(cine?40000:0);
   skyU.uTime.value=T;skyU.uRed.value=ENDM;skyU.uTop.value.setRGB(lerp(.004,.006,tod),lerp(.007,.003,tod),lerp(.018,.008,tod));skyU.uHor.value.setRGB(lerp(.03,.05,tod),lerp(.035,.02,tod),lerp(.05,.025,tod));
   /* lampi */
@@ -1997,12 +2129,10 @@ function step(dt){
   /* camera */
   let ce=eyeV();if(FX.shake>0||panic>.4){const s=(FX.shake+(panic>.4?(panic-.4)*.15:0))*(RM?.08:.3);ce.add(V(rnd(-s,s),rnd(-s,s),rnd(-s,s)));}
   camera.position.copy(ce);camera.lookAt(ce.clone().add(fwdV()));
-  {const mv=Math.hypot(IN.f-IN.jy,IN.s+IN.jx)>0&&!PL.ride,bb=PL.bob,dg=IN.dig&&canDig();VM.visible=playing&&!cine;
-   VM.position.set(Math.sin(bb*.5)*.012*(mv?1:0),Math.abs(Math.cos(bb*.5))*.012*(mv?1:0)+Math.sin(T*1.3)*.004,0);
-   VMH.position.set(.25+(dg?rnd(-.006,.006):0),-.74+(dg?Math.sin(T*70)*.012:0),-.78+(dg?Math.abs(Math.sin(T*35))*.015:0));VMT.rotation.z=.08+Math.sin(T*.9)*.01+(panic>.5?rnd(-.02,.02):0);}
+  VM.visible=playing&&!cine;if(VM.visible)vmUpdate(dt,tI,LV,IN.dig&&canDig(),panic);
   const fov=cine?(cine.t>11&&cine.t<29?78:68):(PL.ride?74:70-panic*6);if(Math.abs(camera.fov-fov)>.05){camera.fov=lerp(camera.fov,fov,Math.min(1,dt*3));camera.updateProjectionMatrix();}
   sky.position.copy(camera.position);
-  torch.intensity=tI*16;fill.intensity=tI*.12+.05;VMT.userData.lens.material.color.setScalar(tI?1.1:.05);
+  torch.intensity=tI*16;fill.intensity=tI*.12+.05;
   motesU.uTP.value.copy(torch.getWorldPosition(tmpV));motesU.uTD.value.copy(fwdV());motesU.uTI.value=tI;motesU.uScale.value=innerHeight*PR/(2*Math.tan(camera.fov*Math.PI/360));motesU.uAmb.value=.015+LV*.02;
   dustU.uScale.value=motesU.uScale.value;
   const sc=V(PL.x+Math.cos(PL.yaw)*90,PL.y,PL.z+Math.sin(PL.yaw)*90);moon.target.position.copy(sc);moon.position.copy(sc).addScaledVector(skyU.uMoon.value,2500);
